@@ -783,22 +783,20 @@
                                 </button>
 
                                 {/* Token 用量显示 */}
-                                {tokenUsage.batches > 0 && (
-                                    <div className="mt-3 p-3 rounded-xl bg-gray-950/80 border border-gray-800 grid grid-cols-3 gap-2 text-center">
-                                        <div className="flex flex-col">
-                                            <span className="text-[10px] text-gray-500">输入 Token</span>
-                                            <span className="text-sm font-bold text-blue-400">{tokenUsage.prompt.toLocaleString()}</span>
-                                        </div>
-                                        <div className="flex flex-col">
-                                            <span className="text-[10px] text-gray-500">输出 Token</span>
-                                            <span className="text-sm font-bold text-emerald-400">{tokenUsage.output.toLocaleString()}</span>
-                                        </div>
-                                        <div className="flex flex-col">
-                                            <span className="text-[10px] text-gray-500">合计 / 批次数</span>
-                                            <span className="text-sm font-bold text-purple-400">{tokenUsage.total.toLocaleString()} <span className="text-[10px] text-gray-500">/ {tokenUsage.batches}批</span></span>
-                                        </div>
+                                <div className={`mt-3 p-3 rounded-xl border border-gray-800 grid grid-cols-3 gap-2 text-center transition-colors ${tokenUsage.batches > 0 ? 'bg-gray-950/80' : 'bg-gray-950/40 opacity-60'}`}>
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] text-gray-500">输入 Token</span>
+                                        <span className="text-sm font-bold text-blue-400">{tokenUsage.prompt.toLocaleString()}</span>
                                     </div>
-                                )}
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] text-gray-500">输出 Token</span>
+                                        <span className="text-sm font-bold text-emerald-400">{tokenUsage.output.toLocaleString()}</span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] text-gray-500">合计 / 批次数</span>
+                                        <span className="text-sm font-bold text-purple-400">{tokenUsage.total.toLocaleString()} <span className="text-[10px] text-gray-500">/ {tokenUsage.batches}批</span></span>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Execution Log console */}
