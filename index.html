@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>二次元多语言标签智能分类与探源</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=Outfit:wght@300;400;600;800&display=swap');
+        body {
+            font-family: 'Noto Sans SC', 'Outfit', sans-serif;
+            background-color: #0b0f19;
+            color: #f3f4f6;
+        }
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .anime-gradient {
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+        }
+        .glow-effect:hover {
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.4);
+            border-color: rgba(168, 85, 247, 0.6);
+        }
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+<body class="min-h-screen selection:bg-purple-500 selection:text-white">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        const CATEGORY_MAP_TO_ENG = {
+            '特征': 'feature',
+            '角色': 'character',
+            '作品': 'copyright',
+            '作者': 'artist',
+            '上述皆非': 'non_preference',
+            '待分析': '',
+            '分析中': ''
+        };
+
+        const CATEGORY_MAP_TO_ZH = {
+            'feature': '特征',
+            'character': '角色',
+            'copyright': '作品',
+            'artist': '作者',
+            'non_preference': '上述皆非'
+        };
+
+        const CATEGORY_ALIASES = {
+            'ip': 'copyright'
+        };
+
+        const ALLOWED_CSV_CATEGORIES = ['feature', 'character', 'copyright', 'artist', 'non_preference'];
+        const DISALLOWED_CSV_CATEGORIES = ['unresolved', 'unknown'];
+
+        const PRESETS = {
+            mixed: "ツンデレ, 五条悟, Blue Archive, 赤坂アカ, けいおん!, keyboard, 츠유, ヤンデレ, Fate/Grand Order, 深崎暮人",
+            characters: "初音ミク, 2B, 胡桃, Sans, 坂田銀時, 아로나, Megumin",
+            works: "チェンソーマン, Cyberpunk: Edgerunners, 蔚蓝档案, Solo Leveling, 原神",
+            attributes: "绝对领域, tsundere, 黑髪ロング, 얀데레, megaekko, 呆毛, retro filter"
+        };
+
+        const CATEGORY_COLORS = {
+            '特征': { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', badge: 'bg-emerald-500/20' },
+            '作品': { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400', badge: 'bg-blue-500/20' },
+            '角色': { bg: 'bg-purple-500/10', border: 'border-purple-500/30', text: 'text-purple-400', badge: 'bg-purple-500/20' },
+            '作者': { bg: 'bg-pink-500/10', border: 'border-pink-500/30', text: 'text-pink-400', badge: 'bg-pink-500/20' },
+            '上述皆非': { bg: 'bg-slate-500/10', border: 'border-slate-500/30', text: 'text-slate-400', badge: 'bg-slate-500/20' },
+            '分析中': { bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-400', badge: 'bg-amber-500/20' },
+            '待分析': { bg: 'bg-gray-500/10', border: 'border-gray-500/20', text: 'text-gray-400', badge: 'bg-gray-500/10' }
+        };
+
+        function Icon({ name, className = "w-4 h-4" }) {
+            const icons = {
+                sparkles: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 21l-1.81-5.096L2 15l5.096-1.81L9 8l1.81 5.096L16 15l-6.187.904zM21 5.105L19.81 9 18 10.19 19.81 12 21 15.895 22.19 12 24 10.19 22.19 9 21 5.105z" /></svg>,
+                pencil: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>,
+                "trash-2": <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3M4 7h16" /></svg>,
+                plus: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>,
+                sliders: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>,
+                play: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+                terminal: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z" /></svg>,
+                layers: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>,
+                film: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M7 4v16M17 4v18M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" /></svg>,
+                user: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>,
+                "pen-tool": <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>,
+                "help-circle": <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+                search: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>,
+                copy: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>,
+                download: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>,
+                upload: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>,
+                "list-filter": <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" /></svg>,
+                compass: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-2-9-9-9-2 9 2 9zm0 0l4-4" /></svg>,
+                check: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>,
+                "alert-triangle": <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>,
+                "chevron-right": <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>,
+                x: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>,
+                "book-open": <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477-4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>,
+                globe: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>,
+                info: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+                key: <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+            };
+            return icons[name] || null;
+        }
+
+        // CSV 行级解析工具
+        function parseCSVLines(text) {
+            const lines = [];
+            let currentLine = [];
+            let currentCell = '';
+            let insideQuotes = false;
+            
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                if (char === '"') {
+                    if (insideQuotes && text[i+1] === '"') {
+                        currentCell += '"';
+                        i++;
+                    } else {
+                        insideQuotes = !insideQuotes;
+                    }
+                } else if (char === ',' && !insideQuotes) {
+                    currentLine.push(currentCell);
+                    currentCell = '';
+                } else if ((char === '\n' || char === '\r') && !insideQuotes) {
+                    if (char === '\r' && text[i+1] === '\n') i++; 
+                    currentLine.push(currentCell);
+                    lines.push(currentLine);
+                    currentLine = [];
+                    currentCell = '';
+                } else {
+                    currentCell += char;
+                }
+            }
+            if (currentCell !== '' || currentLine.length > 0) {
+                currentLine.push(currentCell);
+                lines.push(currentLine);
+            }
+            return lines;
+        }
+
+        function App() {
+            // 从 localStorage 恢复凭据与偏好
+            const loadPersisted = (key, fallback) => {
+                try { const v = localStorage.getItem(key); return v !== null ? v : fallback; } catch(e) { return fallback; }
+            };
+            const [customApiKey, setCustomApiKey] = useState(() => loadPersisted('acg_api_key', ''));
+            const [modelName, setModelName] = useState(() => loadPersisted('acg_model', 'gemini-2.5-flash')); // 自定义模型状态
+            const [inputText, setInputText] = useState("");
+            const [tags, setTags] = useState([]);
+            const [isAnalyzing, setIsAnalyzing] = useState(false);
+            const [progress, setProgress] = useState({ current: 0, total: 0 });
+            const [activeTab, setActiveTab] = useState("全部");
+            const [searchQuery, setSearchQuery] = useState("");
+            const [useSearch, setUseSearch] = useState(() => loadPersisted('acg_search', 'true') === 'true');
+            const [batchSize, setBatchSize] = useState(() => parseInt(loadPersisted('acg_batch', '10')) || 10);
+            const [selectedTag, setSelectedTag] = useState(null);
+            const [toast, setToast] = useState(null);
+            const [logs, setLogs] = useState([]);
+            // Token 用量统计（累计）
+            const [tokenUsage, setTokenUsage] = useState({ prompt: 0, output: 0, total: 0, batches: 0 });
+            
+            const auditFileInputRef = useRef(null);
+            const rawFileInputRef = useRef(null);
+
+            // 持久化凭据与偏好到 localStorage
+            useEffect(() => { try { localStorage.setItem('acg_api_key', customApiKey); } catch(e) {} }, [customApiKey]);
+            useEffect(() => { try { localStorage.setItem('acg_model', modelName); } catch(e) {} }, [modelName]);
+            useEffect(() => { try { localStorage.setItem('acg_search', String(useSearch)); } catch(e) {} }, [useSearch]);
+            useEffect(() => { try { localStorage.setItem('acg_batch', String(batchSize)); } catch(e) {} }, [batchSize]);
+
+            const loadPreset = (type) => {
+                setInputText(PRESETS[type]);
+                showToast(`已加载 ${type === 'mixed' ? '混合' : type === 'characters' ? '角色' : type === 'works' ? '作品' : '特征'} 预设标签！`);
+            };
+
+            const showToast = (message, type = "success") => {
+                setToast({ message, type });
+                setTimeout(() => setToast(null), 4000);
+            };
+
+            // 处理用于初步导入的原始 CSV 文件
+            const handleRawCSVUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const csvText = event.target.result;
+                        const lines = parseCSVLines(csvText).filter(l => l.length > 0 && l.join('').trim() !== '');
+                        if (lines.length === 0) throw new Error("CSV 文件为空");
+
+                        let extractedTags = [];
+                        const headers = lines[0].map(h => h.trim().toLowerCase());
+                        const tagIdx = headers.indexOf('tag');
+
+                        if (tagIdx !== -1) {
+                            // 若含 tag 表头，提取该列
+                            for (let i = 1; i < lines.length; i++) {
+                                const val = (lines[i][tagIdx] || "").trim();
+                                if (val) extractedTags.push(val);
+                            }
+                        } else {
+                            // 若无表头，提取所有非空单元格
+                            extractedTags = lines.flat().map(cell => cell.trim()).filter(cell => cell.length > 0);
+                        }
+
+                        if (extractedTags.length === 0) {
+                            throw new Error("未能从 CSV 提取到有效标签文本");
+                        }
+
+                        const newText = extractedTags.join(', ');
+                        setInputText(prev => prev ? prev + ',\n' + newText : newText);
+                        showToast(`成功从 CSV 提取 ${extractedTags.length} 个标签至输入框`);
+                        
+                    } catch (err) {
+                        showToast(`导入失败: ${err.message}`, "error");
+                    }
+                    if (rawFileInputRef.current) rawFileInputRef.current.value = '';
+                };
+                reader.onerror = () => showToast("文件读取失败", "error");
+                reader.readAsText(file, "UTF-8");
+            };
+
+            const parseTags = () => {
+                if (!inputText.trim()) {
+                    showToast("请输入或导入标签后再进行分析", "error");
+                    return;
+                }
+                const rawTags = inputText
+                    .split(/[,\n，、;\t]+/)
+                    .map(t => t.trim())
+                    .filter(t => t.length > 0);
+
+                const uniqueTags = [...new Set(rawTags)];
+                
+                const newTagObjects = uniqueTags.map(tag => {
+                    const existing = tags.find(t => t.name === tag);
+                    return existing || {
+                        name: tag,
+                        category: "待分析",
+                        explanation: "等待分析队列启动...",
+                        language: "未知",
+                        status: "idle", 
+                        sources: []
+                    };
+                });
+
+                setTags(newTagObjects);
+                showToast(`成功解析并去重，共导入 ${newTagObjects.length} 个标签！`);
+            };
+
+            const clearAll = () => {
+                setInputText("");
+                setTags([]);
+                setSelectedTag(null);
+                setLogs([]);
+                setTokenUsage({ prompt: 0, output: 0, total: 0, batches: 0 });
+                showToast("已清空所有输入、分析结果与 Token 统计", "info");
+            };
+
+            const fetchWithBackoff = async (url, options, retries = 5, delay = 1000) => {
+                try {
+                    const response = await fetch(url, options);
+                    if (!response.ok) {
+                        const errText = await response.text();
+                        throw new Error(`HTTP error! Status: ${response.status} - ${errText}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    if (retries > 1) {
+                        setLogs(prev => [...prev, `[重试中] 接口繁忙，将在 ${delay/1000} 秒后重新尝试...`]);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        return fetchWithBackoff(url, options, retries - 1, delay * 2);
+                    } else {
+                        throw error;
+                    }
+                }
+            };
+
+            const analyzeBatch = async (batchTags) => {
+                if (!customApiKey) {
+                    throw new Error("请在配置区输入有效的 Gemini API Key");
+                }
+
+                const tagNames = batchTags.map(t => t.name);
+                setLogs(prev => [...prev, `[准备请求] 正在对 [ ${tagNames.join(', ')} ] 进行二次元画像与分类...`]);
+
+                const systemPrompt = `你是一位资深的二次元（ACG）文化专家及数据归类员。
+你的任务是将提供的多个标签进行精细化分类，并解释关联。
+
+【分类标准说明】（务必返回严格对应的中文类别名称）
+1. 特征 (Characteristics)：萌属性、艺术风格、服装细节。
+2. 作品 (Work/Series)：动漫名、游戏名、连载IP。
+3. 角色 (Character)：ACG虚拟人物。
+4. 作者 (Author)：画师、小说家、同人社团。
+5. 上述皆非 (None of the above)：完全无关的词汇。
+
+【输出规范】
+返回严格JSON。包含 tag(原名一致), category(以上五种之一), explanation(中文解释), language(语种)。`;
+
+                const userQuery = `请针对以下标签集合进行分析：[ ${tagNames.join(', ')} ]。`;
+
+                const payload = {
+                    contents: [{ parts: [{ text: userQuery }] }],
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "OBJECT",
+                            properties: {
+                                results: {
+                                    type: "ARRAY",
+                                    items: {
+                                        type: "OBJECT",
+                                        properties: {
+                                            tag: { type: "STRING" },
+                                            category: { type: "STRING", enum: ["特征", "作品", "角色", "作者", "上述皆非"] },
+                                            explanation: { type: "STRING" },
+                                            language: { type: "STRING" }
+                                        },
+                                        required: ["tag", "category", "explanation", "language"]
+                                    }
+                                }
+                            },
+                            required: ["results"]
+                        }
+                    }
+                };
+
+                if (useSearch) {
+                    payload.tools = [{ "google_search": {} }];
+                }
+
+                const targetModel = modelName.trim() || 'gemini-2.5-flash';
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${customApiKey}`;
+
+                try {
+                    const result = await fetchWithBackoff(url, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const candidateText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (!candidateText) {
+                        throw new Error("模型未返回有效文本");
+                    }
+
+                    const responseObj = JSON.parse(candidateText);
+                    const batchResults = responseObj.results || [];
+
+                    const sources = result.candidates?.[0]?.groundingMetadata?.groundingAttributions?.map(a => ({
+                        uri: a.web?.uri,
+                        title: a.web?.title
+                    })) || [];
+
+                    // 提取并累计 token 用量
+                    const usage = result.usageMetadata;
+                    if (usage) {
+                        const promptTokens = usage.promptTokenCount || 0;
+                        const outputTokens = usage.candidatesTokenCount || 0;
+                        const totalTokens = usage.totalTokenCount || 0;
+                        setTokenUsage(prev => ({
+                            prompt: prev.prompt + promptTokens,
+                            output: prev.output + outputTokens,
+                            total: prev.total + totalTokens,
+                            batches: prev.batches + 1
+                        }));
+                        setLogs(prev => [...prev, `[Token] 本批: 输入 ${promptTokens} | 输出 ${outputTokens} | 合计 ${totalTokens}`]);
+                    }
+
+                    setTags(prevTags => {
+                        return prevTags.map(item => {
+                            const match = batchResults.find(r => r.tag.toLowerCase() === item.name.toLowerCase());
+                            if (match) {
+                                return {
+                                    ...item,
+                                    category: match.category,
+                                    explanation: match.explanation,
+                                    language: match.language,
+                                    status: "success",
+                                    sources: sources
+                                };
+                            }
+                            if (tagNames.includes(item.name)) {
+                                return { ...item, status: "failed", explanation: "分析引擎未能成功处理此标签。" };
+                            }
+                            return item;
+                        });
+                    });
+
+                    setLogs(prev => [...prev, `[分析完毕] 批次处理成功！已分类：${tagNames.join(', ')}`]);
+
+                } catch (error) {
+                    console.error("Batch Analysis Error:", error);
+                    setLogs(prev => [...prev, `[分析失败] 处理 [ ${tagNames.join(', ')} ] 遇到错误: ${error.message}`]);
+                    
+                    setTags(prevTags => {
+                        return prevTags.map(item => {
+                            if (tagNames.includes(item.name)) {
+                                return { ...item, status: "failed", explanation: `网络错误或解析失败: ${error.message}` };
+                            }
+                            return item;
+                        });
+                    });
+                    
+                    if (error.message.includes("API Key")) {
+                        throw error;
+                    }
+                }
+            };
+
+            const startAnalysis = async () => {
+                if (!customApiKey) {
+                    showToast("执行前，请在下方配置区填入 Gemini API Key", "error");
+                    return;
+                }
+
+                const idleTags = tags.filter(t => t.status === "idle" || t.status === "failed");
+                if (idleTags.length === 0) {
+                    showToast("队列中没有待分析的标签（手动标记的标签将被跳过）", "info");
+                    return;
+                }
+
+                setIsAnalyzing(true);
+                setProgress({ current: 0, total: idleTags.length });
+                setLogs(prev => [...prev, `🚀 启动二次元分析工作流。待处理标签总数: ${idleTags.length}，启用联网检索: ${useSearch ? '是' : '否'}`]);
+
+                setTags(prev => prev.map(t => (t.status === "idle" || t.status === "failed") ? { ...t, status: "loading", category: "分析中" } : t));
+
+                try {
+                    for (let i = 0; i < idleTags.length; i += batchSize) {
+                        const chunk = idleTags.slice(i, i + batchSize);
+                        await analyzeBatch(chunk);
+                        setProgress(prev => ({
+                            ...prev,
+                            current: Math.min(prev.current + chunk.length, prev.total)
+                        }));
+                    }
+                    setLogs(prev => [...prev, `🏁 所有标签分析完成！`]);
+                    showToast("🎉 标签库全部分析完成！");
+                } catch(e) {
+                    showToast(e.message, "error");
+                    setIsAnalyzing(false);
+                }
+                
+                setIsAnalyzing(false);
+            };
+
+            // 处理带有规范类别的人工审核 CSV 覆盖
+            const handleAuditFileUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const csvText = event.target.result;
+                        const lines = parseCSVLines(csvText).filter(l => l.length > 0 && l.join('').trim() !== '');
+                        if (lines.length < 1) throw new Error("CSV 文件为空");
+
+                        const headers = lines[0].map(h => h.trim().toLowerCase());
+                        const tagIdx = headers.indexOf('tag');
+                        const classIdx = headers.indexOf('classification');
+
+                        if (tagIdx === -1 || classIdx === -1) {
+                            throw new Error("表头校验失败：必须包含 'tag' 和 'classification' 列");
+                        }
+
+                        let updates = [];
+                        let seenTagsInCSV = new Set();
+
+                        for (let i = 1; i < lines.length; i++) {
+                            const row = lines[i];
+                            const tagVal = (row[tagIdx] || "").trim();
+                            let classVal = (row[classIdx] || "").trim().toLowerCase();
+
+                            if (!tagVal) {
+                                throw new Error(`第 ${i + 1} 行校验失败：tag 不能为空`);
+                            }
+
+                            if (seenTagsInCSV.has(tagVal)) {
+                                throw new Error(`第 ${i + 1} 行校验失败：CSV 中存在重复的标签 "${tagVal}"`);
+                            }
+                            seenTagsInCSV.add(tagVal);
+
+                            if (classVal === "") {
+                                continue;
+                            }
+
+                            if (CATEGORY_ALIASES[classVal]) {
+                                classVal = CATEGORY_ALIASES[classVal];
+                            }
+
+                            if (DISALLOWED_CSV_CATEGORIES.includes(classVal)) {
+                                throw new Error(`第 ${i + 1} 行校验失败：不支持类别 "${classVal}" (标签: ${tagVal})`);
+                            }
+                            if (!ALLOWED_CSV_CATEGORIES.includes(classVal)) {
+                                throw new Error(`第 ${i + 1} 行校验失败：发现未定义的类别 "${classVal}" (标签: ${tagVal})`);
+                            }
+
+                            updates.push({ tag: tagVal, classification: classVal });
+                        }
+
+                        setTags(prevTags => {
+                            const newTags = [...prevTags];
+                            updates.forEach(update => {
+                                const targetCategoryZh = CATEGORY_MAP_TO_ZH[update.classification];
+                                let existingIdx = newTags.findIndex(t => t.name === update.tag);
+                                
+                                if (existingIdx !== -1) {
+                                    newTags[existingIdx] = {
+                                        ...newTags[existingIdx],
+                                        category: targetCategoryZh,
+                                        status: 'manual',
+                                        explanation: '(人工审核修正)' + (newTags[existingIdx].explanation || '')
+                                    };
+                                } else {
+                                    newTags.push({
+                                        name: update.tag,
+                                        category: targetCategoryZh,
+                                        status: 'manual',
+                                        language: '未知',
+                                        explanation: '(人工分类创建)',
+                                        sources: []
+                                    });
+                                }
+                            });
+                            return newTags;
+                        });
+
+                        setLogs(prev => [...prev, `[人工导入] CSV 校验通过，成功写入/覆盖 ${updates.length} 条数据。`]);
+                        showToast(`导入成功：成功更新 ${updates.length} 条标签数据`);
+                        
+                    } catch (err) {
+                        setLogs(prev => [...prev, `[导入错误] ${err.message}`]);
+                        showToast(err.message, "error");
+                    }
+                    
+                    if (auditFileInputRef.current) auditFileInputRef.current.value = '';
+                };
+                
+                reader.onerror = () => showToast("文件读取失败", "error");
+                reader.readAsText(file, "UTF-8");
+            };
+
+            const stats = useMemo(() => {
+                const totals = { 全部: tags.length, 特征: 0, 作品: 0, 角色: 0, 作者: 0, 上述皆非: 0, 待处理: 0 };
+                tags.forEach(t => {
+                    if (t.status === "idle" || t.status === "loading") {
+                        totals.待处理++;
+                    } else if (totals[t.category] !== undefined) {
+                        totals[t.category]++;
+                    } else {
+                        totals.上述皆非++;
+                    }
+                });
+                return totals;
+            }, [tags]);
+
+            const filteredTags = useMemo(() => {
+                return tags.filter(t => {
+                    const matchesCategory = activeTab === "全部" || t.category === activeTab || (activeTab === "待处理" && (t.status === "idle" || t.status === "loading"));
+                    const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                          t.explanation.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                          t.language.toLowerCase().includes(searchQuery.toLowerCase());
+                    return matchesCategory && matchesSearch;
+                });
+            }, [tags, activeTab, searchQuery]);
+
+            const exportToCSV = () => {
+                if (tags.length === 0) {
+                    showToast("暂无数据可导出", "error");
+                    return;
+                }
+                let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
+                csvContent += "tag,classification,explanation,language\n";
+                
+                tags.forEach(t => {
+                    const safeName = `"${t.name.replace(/"/g, '""')}"`;
+                    const safeCategory = `"${CATEGORY_MAP_TO_ENG[t.category] || ''}"`;
+                    const safeLang = `"${t.language.replace(/"/g, '""')}"`;
+                    const safeExplanation = `"${t.explanation.replace(/"/g, '""')}"`;
+                    
+                    csvContent += `${safeName},${safeCategory},${safeExplanation},${safeLang}\n`;
+                });
+
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", `ACG_Tags_Export_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showToast("CSV 数据导出成功！格式已兼容二次导入");
+            };
+
+            return (
+                <div className="min-h-screen pb-12">
+                    {/* Header Banner */}
+                    <header className="border-b border-gray-800 bg-gray-950/80 sticky top-0 z-50 backdrop-blur-md">
+                        <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-gradient-to-tr from-purple-600 to-pink-500 rounded-xl shadow-lg">
+                                    <Icon name="sparkles" className="w-6 h-6 text-white animate-pulse" />
+                                </div>
+                                <div>
+                                    <h1 className="text-xl font-extrabold tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-pink-400 to-amber-300">
+                                        ACG TAG INSIGHT
+                                    </h1>
+                                    <p className="text-xs text-gray-400">标签智能归类 • 人工审核融合工作台</p>
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Toast Notification */}
+                    {toast && (
+                        <div className="fixed top-20 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-2xl transition-all duration-300 transform translate-y-0 bg-slate-900 border border-purple-500 text-gray-100 max-w-sm">
+                            <Icon name={toast.type === "error" ? "alert-triangle" : "info"} className={`w-5 h-5 flex-shrink-0 ${toast.type === "error" ? "text-red-400" : "text-purple-400"}`} />
+                            <span className="text-sm font-medium">{toast.message}</span>
+                        </div>
+                    )}
+
+                    <main className="max-w-7xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        
+                        {/* LEFT COLUMN: Input & Control Panel */}
+                        <section className="lg:col-span-5 flex flex-col gap-6">
+                            
+                            {/* Input Panel */}
+                            <div className="glass-panel p-5 rounded-2xl flex flex-col gap-4">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-bold text-gray-300 flex items-center gap-1.5">
+                                        <Icon name="pencil" className="w-4 h-4 text-purple-400" />
+                                        1. 输入或导入标签
+                                    </span>
+                                    <div className="flex items-center gap-3">
+                                        {/* 隐藏的原始标签导入文件输入 */}
+                                        <input 
+                                            type="file" 
+                                            accept=".csv" 
+                                            ref={rawFileInputRef} 
+                                            className="hidden" 
+                                            onChange={handleRawCSVUpload} 
+                                        />
+                                        <button 
+                                            onClick={() => rawFileInputRef.current.click()}
+                                            className="text-xs text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+                                            title="支持包含 tag 表头或纯文本列表的CSV"
+                                        >
+                                            <Icon name="upload" className="w-3.5 h-3.5" />
+                                            导入 CSV
+                                        </button>
+                                        <span className="text-gray-700">|</span>
+                                        <button 
+                                            onClick={clearAll}
+                                            className="text-xs text-gray-500 hover:text-red-400 transition-colors flex items-center gap-1"
+                                        >
+                                            <Icon name="trash-2" className="w-3.5 h-3.5" />
+                                            清空
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <textarea
+                                    className="w-full h-28 bg-gray-950 border border-gray-800 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-gray-200 placeholder-gray-600"
+                                    placeholder="可手动输入（支持逗号/换行分隔），或点击右上角导入 CSV 文件提取标签。"
+                                    value={inputText}
+                                    onChange={(e) => setInputText(e.target.value)}
+                                ></textarea>
+
+                                <button
+                                    onClick={parseTags}
+                                    className="w-full py-2.5 rounded-xl font-bold text-sm bg-purple-600/30 hover:bg-purple-600 border border-purple-500/50 hover:border-purple-400 transition-all duration-300 text-purple-200 hover:text-white flex items-center justify-center gap-2 cursor-pointer"
+                                >
+                                    <Icon name="plus" className="w-4 h-4" />
+                                    解析并导入到分析列表
+                                </button>
+                            </div>
+
+                            {/* Analysis Options */}
+                            <div className="glass-panel p-5 rounded-2xl flex flex-col gap-4">
+                                <h3 className="text-sm font-bold text-gray-300 flex items-center gap-1.5">
+                                    <Icon name="sliders" className="w-4 h-4 text-pink-400" />
+                                    2. 模型配置与执行
+                                </h3>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {/* API Key Input */}
+                                    <div className="flex flex-col gap-1.5">
+                                        <span className="text-xs text-gray-400 flex items-center gap-1">
+                                            <Icon name="key" className="w-3.5 h-3.5" />
+                                            API Key (必填)
+                                        </span>
+                                        <input 
+                                            type="password" 
+                                            placeholder="AIzaSy..." 
+                                            value={customApiKey}
+                                            onChange={(e) => setCustomApiKey(e.target.value)}
+                                            className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-purple-500 font-mono"
+                                        />
+                                    </div>
+                                    
+                                    {/* Model Selection Input */}
+                                    <div className="flex flex-col gap-1.5">
+                                        <span className="text-xs text-gray-400 flex items-center gap-1">
+                                            <Icon name="layers" className="w-3.5 h-3.5" />
+                                            指定模型 (Model)
+                                        </span>
+                                        <input 
+                                            type="text" 
+                                            list="model-list"
+                                            placeholder="gemini-2.5-flash" 
+                                            value={modelName}
+                                            onChange={(e) => setModelName(e.target.value)}
+                                            className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-purple-500 font-mono"
+                                        />
+                                        <datalist id="model-list">
+                                            <option value="gemini-2.5-flash" />
+                                            <option value="gemini-2.5-pro" />
+                                            <option value="gemini-1.5-flash" />
+                                            <option value="gemini-1.5-pro" />
+                                            <option value="gemini-flash-latest" />
+                                        </datalist>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center justify-between p-3 rounded-xl bg-gray-950 border border-gray-800 mt-2">
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-semibold text-gray-200 flex items-center gap-1">
+                                            开启 Google 联网搜索
+                                        </span>
+                                        <span className="text-[10px] text-gray-500 mt-0.5">针对极冷门或缩写玩梗极为精准</span>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" checked={useSearch} onChange={() => setUseSearch(!useSearch)} className="sr-only peer"/>
+                                        <div className="w-11 h-6 bg-gray-800 rounded-full peer peer-focus:ring-2 peer-focus:ring-purple-500 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-gray-300 after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                                    </label>
+                                </div>
+
+                                <button
+                                    onClick={startAnalysis}
+                                    disabled={isAnalyzing || tags.length === 0}
+                                    className={`w-full py-3.5 mt-2 rounded-xl font-bold text-sm text-white anime-gradient transition-all duration-300 shadow-lg flex items-center justify-center gap-2 ${isAnalyzing || tags.length === 0 ? 'opacity-40 cursor-not-allowed filter grayscale' : 'hover:scale-[1.01] glow-effect cursor-pointer'}`}
+                                >
+                                    {isAnalyzing ? (
+                                        <>
+                                            <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                                            分析中 ({progress.current}/{progress.total})...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Icon name="play" className="w-4 h-4" />
+                                            启动 AI 批量画像分类
+                                        </>
+                                    )}
+                                </button>
+
+                                {/* Token 用量显示 */}
+                                {tokenUsage.batches > 0 && (
+                                    <div className="mt-3 p-3 rounded-xl bg-gray-950/80 border border-gray-800 grid grid-cols-3 gap-2 text-center">
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] text-gray-500">输入 Token</span>
+                                            <span className="text-sm font-bold text-blue-400">{tokenUsage.prompt.toLocaleString()}</span>
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] text-gray-500">输出 Token</span>
+                                            <span className="text-sm font-bold text-emerald-400">{tokenUsage.output.toLocaleString()}</span>
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] text-gray-500">合计 / 批次数</span>
+                                            <span className="text-sm font-bold text-purple-400">{tokenUsage.total.toLocaleString()} <span className="text-[10px] text-gray-500">/ {tokenUsage.batches}批</span></span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Execution Log console */}
+                            {logs.length > 0 && (
+                                <div className="glass-panel p-4 rounded-2xl flex flex-col gap-2">
+                                    <div className="flex items-center justify-between border-b border-gray-800 pb-2">
+                                        <span className="text-xs font-bold text-gray-400 flex items-center gap-1.5">
+                                            <Icon name="terminal" className="w-3.5 h-3.5 text-blue-400" />
+                                            分析终端日志
+                                        </span>
+                                        <button onClick={() => setLogs([])} className="text-[10px] text-gray-500 hover:text-gray-300">清除</button>
+                                    </div>
+                                    <div className="bg-gray-950 p-2.5 rounded-xl border border-gray-900 h-28 overflow-y-auto text-[11px] font-mono text-gray-400 flex flex-col gap-1">
+                                        {logs.map((log, index) => (
+                                            <div key={index} className="leading-relaxed whitespace-pre-wrap">{log}</div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </section>
+
+                        {/* RIGHT COLUMN: Results Dashboard */}
+                        <section className="lg:col-span-7 flex flex-col gap-6">
+                            
+                            {/* Statistics Cards */}
+                            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                                {[
+                                    { label: '全部', val: stats.全部, icon: 'layers', color: 'text-indigo-400' },
+                                    { label: '特征', val: stats.特征, icon: 'sparkles', color: 'text-emerald-400' },
+                                    { label: '作品', val: stats.作品, icon: 'film', color: 'text-blue-400' },
+                                    { label: '角色', val: stats.角色, icon: 'user', color: 'text-purple-400' },
+                                    { label: '作者', val: stats.作者, icon: 'pencil', color: 'text-pink-400' },
+                                    { label: '待处理', val: stats.待处理, icon: 'compass', color: 'text-slate-400' }
+                                ].map(item => (
+                                    <div 
+                                        key={item.label}
+                                        onClick={() => setActiveTab(item.label)}
+                                        className={`glass-panel p-3 rounded-xl flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-800/50 transition-all ${activeTab === item.label ? 'ring-2 ring-purple-500 bg-purple-950/20' : ''}`}
+                                    >
+                                        <Icon name={item.icon} className={`w-4 h-4 mb-1.5 ${item.color}`} />
+                                        <span className="text-[10px] text-gray-500 font-medium">{item.label}</span>
+                                        <span className="text-sm font-bold text-gray-200 mt-0.5">{item.val}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Filters and Utilities bar */}
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-gray-950 p-3 rounded-xl border border-gray-800">
+                                <div className="relative flex-1">
+                                    <Icon name="search" className="absolute left-3 top-2.5 w-4 h-4 text-gray-500" />
+                                    <input
+                                        type="text"
+                                        placeholder="检索标签..."
+                                        className="w-full bg-slate-900 border border-gray-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-purple-500"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                    />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {/* 隐藏的人工审核文件上传输入 */}
+                                    <input 
+                                        type="file" 
+                                        accept=".csv" 
+                                        ref={auditFileInputRef} 
+                                        className="hidden" 
+                                        onChange={handleAuditFileUpload} 
+                                    />
+                                    <button 
+                                        onClick={() => auditFileInputRef.current.click()}
+                                        className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+                                        title="导入包含 classification 的人工审核CSV文件以覆写结果"
+                                    >
+                                        <Icon name="upload" className="w-3.5 h-3.5" />
+                                        人工审核导入
+                                    </button>
+                                    <button 
+                                        onClick={exportToCSV}
+                                        className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+                                        title="导出Excel格式文件"
+                                    >
+                                        <Icon name="download" className="w-3.5 h-3.5" />
+                                        导出 CSV
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Tags Grid / List container */}
+                            <div className="glass-panel rounded-2xl p-5 min-h-[400px] flex flex-col gap-4">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-sm font-bold text-gray-300 flex items-center gap-2">
+                                        <Icon name="list-filter" className="w-4 h-4 text-purple-400" />
+                                        标签库列表 (已展示 {filteredTags.length} 个)
+                                    </h3>
+                                </div>
+
+                                {filteredTags.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-20 text-center gap-4 text-gray-600">
+                                        <Icon name="compass" className="w-12 h-12 stroke-1 text-gray-700 animate-spin" />
+                                        <div className="flex flex-col gap-1 max-w-xs">
+                                            <span className="text-sm font-semibold text-gray-500">无数据记录</span>
+                                            <span className="text-xs text-gray-600">您可以导入原始标签利用AI解析，或通过 CSV 文件直接导入人工分类。</span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                        {filteredTags.map((tag) => {
+                                            const design = CATEGORY_COLORS[tag.category] || CATEGORY_COLORS['待分析'];
+                                            const isSelected = selectedTag?.name === tag.name;
+
+                                            return (
+                                                <div
+                                                    key={tag.name}
+                                                    onClick={() => setSelectedTag(tag)}
+                                                    className={`p-4 rounded-xl border text-left cursor-pointer transition-all duration-300 flex flex-col justify-between h-36 ${design.bg} ${design.border} ${isSelected ? 'ring-2 ring-purple-500 scale-[1.01] shadow-lg' : 'hover:scale-[1.01] hover:bg-slate-800/10'}`}
+                                                >
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <div className="flex flex-col min-w-0">
+                                                            <span className="text-base font-extrabold text-white truncate group-hover:text-purple-400 flex items-center gap-1.5">
+                                                                {tag.name}
+                                                                {tag.status === 'manual' && <span className="bg-blue-500/20 text-blue-400 text-[9px] px-1.5 py-0.5 rounded border border-blue-500/30">人工</span>}
+                                                            </span>
+                                                            <span className="text-[10px] text-gray-400 mt-0.5">
+                                                                语种: {tag.language}
+                                                            </span>
+                                                        </div>
+                                                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${design.badge} ${design.text}`}>
+                                                            {tag.category}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="text-xs text-gray-400 line-clamp-3 mt-2 leading-relaxed">
+                                                        {tag.status === 'idle' ? '等待启动分析...' : tag.explanation}
+                                                    </div>
+
+                                                    <div className="flex items-center justify-between text-[10px] text-gray-500 border-t border-gray-800/50 pt-2 mt-2">
+                                                        <span className="flex items-center gap-1">
+                                                            {tag.status === 'loading' && <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>}
+                                                            {tag.status === 'success' && <Icon name="check" className="w-3 h-3 text-emerald-400" />}
+                                                            {tag.status === 'manual' && <Icon name="pencil" className="w-3 h-3 text-blue-400" />}
+                                                            {tag.status === 'failed' && <Icon name="alert-triangle" className="w-3 h-3 text-red-400" />}
+                                                            状态: {tag.status === 'success' ? '解密完成' : tag.status === 'manual' ? '人工核定' : tag.status === 'loading' ? '探源中' : tag.status === 'failed' ? '分析失败' : '待处理'}
+                                                        </span>
+                                                        <span className="text-purple-400 hover:underline flex items-center gap-0.5">
+                                                            详情 <Icon name="chevron-right" className="w-3 h-3" />
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+                    </main>
+
+                    {/* Detail Modal */}
+                    {selectedTag && (
+                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                            <div className="glass-panel w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl border border-gray-800 animate-in fade-in zoom-in duration-200">
+                                <div className="p-5 border-b border-gray-800 flex items-center justify-between bg-gray-950">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className={`p-1.5 rounded-lg ${CATEGORY_COLORS[selectedTag.category]?.badge || 'bg-slate-800'}`}>
+                                            <span className={`text-xs font-black ${CATEGORY_COLORS[selectedTag.category]?.text || 'text-gray-400'}`}>
+                                                {selectedTag.category}
+                                            </span>
+                                        </div>
+                                        <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                                            {selectedTag.name}
+                                            {selectedTag.status === 'manual' && <span className="bg-blue-500/20 text-blue-400 text-xs px-2 py-0.5 rounded border border-blue-500/30 font-normal">人工校验</span>}
+                                        </h2>
+                                    </div>
+                                    <button onClick={() => setSelectedTag(null)} className="p-1.5 rounded-lg text-gray-400 hover:bg-slate-800 hover:text-white transition">
+                                        <Icon name="x" className="w-5 h-5" />
+                                    </button>
+                                </div>
+
+                                <div className="p-6 flex flex-col gap-5 max-h-[70vh] overflow-y-auto">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="bg-gray-950 p-3 rounded-xl border border-gray-900 flex flex-col gap-0.5">
+                                            <span className="text-[10px] text-gray-500 uppercase font-semibold">识别语种</span>
+                                            <span className="text-sm font-semibold text-gray-300">{selectedTag.language}</span>
+                                        </div>
+                                        <div className="bg-gray-950 p-3 rounded-xl border border-gray-900 flex flex-col gap-0.5">
+                                            <span className="text-[10px] text-gray-500 uppercase font-semibold">分析引擎状态</span>
+                                            <span className="text-sm font-semibold text-gray-300 flex items-center gap-1.5">
+                                                <span className={`w-2 h-2 rounded-full ${selectedTag.status === 'success' || selectedTag.status === 'manual' ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+                                                {selectedTag.status === 'success' ? '模型释义 (Succeeded)' : selectedTag.status === 'manual' ? '人工覆写 (Manual)' : '等待分析'}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col gap-2">
+                                        <h4 className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1">
+                                            <Icon name="book-open" className="w-3.5 h-3.5" />
+                                            二次元背景与潜在关联探源:
+                                        </h4>
+                                        <div className="bg-gray-950 p-4 rounded-xl border border-gray-900 text-sm leading-relaxed text-gray-300 whitespace-pre-wrap">
+                                            {selectedTag.explanation}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="p-4 border-t border-gray-800 bg-gray-950 flex justify-end gap-3">
+                                    <button onClick={() => setSelectedTag(null)} className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-lg transition">
+                                        关闭
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
